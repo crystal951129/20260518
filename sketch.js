@@ -39,7 +39,7 @@ function draw() {
 
   if (gameEnded) {
     showEndScreen();
-    // 處理 6 手勢的 2 秒等待邏輯
+    // 處理 6 手勢的 3 秒等待邏輯
     handleSpecialGesture("6");
     return;
   }
@@ -77,7 +77,7 @@ function draw() {
     text(result, width / 2, y + vHeight + 150);
   }
 
-  // 處理 OK 手勢的 2 秒等待邏輯
+  // 處理 OK 手勢的 3 秒等待邏輯
   handleSpecialGesture("OK");
 
   // 自動結束邏輯：超過 10 秒沒看到手
@@ -103,7 +103,7 @@ function draw() {
   }
 }
 
-// 新增函式處理需要等待 2 秒的特殊手勢
+// 新增函式處理需要等待 3 秒的特殊手勢
 function handleSpecialGesture(target) {
   if (playerGesture === target) {
     if (lastDetectedGesture !== target) {
@@ -112,13 +112,13 @@ function handleSpecialGesture(target) {
     }
 
     let holdElapsed = millis() - gestureHoldStartTime;
-    if (holdElapsed < 2000) {
+    if (holdElapsed < 3000) {
       // 顯示維持手勢的進度
       push();
       textAlign(CENTER);
       textSize(24);
       fill(255, 100, 0);
-      text(`確認手勢 "${target}" 中: ${nf((2000 - holdElapsed) / 1000, 1, 1)}s`, width / 2, height - 30);
+      text(`確認手勢 "${target}" 中: ${nf((3000 - holdElapsed) / 1000, 1, 1)}s`, width / 2, height - 30);
       pop();
     } else {
       if (target === "OK") gameEnded = true;
