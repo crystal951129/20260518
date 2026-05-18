@@ -44,36 +44,13 @@ function draw() {
   scale(-1, 1);            // 水平翻轉
   image(capture, 0, 0, vWidth, vHeight);
   
-  // 繪製手部骨架
-  if (hands.length > 0 && gameState !== "FINISHED") {
+  // 繪製手部關鍵點（可選，增加視覺效果）
+  if (hands.length > 0) {
     drawHandSkeleton(vWidth, vHeight);
   }
   pop();
 
-  // 1. 顯示計分板
-  drawScoreBoard(y);
-
-  // 2. 處理遊戲邏輯
-  if (gameState === "FINISHED") {
-    displayEndGameEffects();
-  } else {
-    displayGameInfo(y, vHeight);
-    handleAutoPlay();
-  }
-
-  // 偵測特殊控制手勢
-  checkControlGestures();
-}
-
-function drawScoreBoard(y) {
-  textAlign(CENTER, CENTER);
-  textSize(28);
-  fill(50);
-  noStroke();
-  text(`勝: ${winCount}  |  敗: ${lossCount}  |  平手: ${tieCount}`, width / 2, y - 40);
-}
-
-function displayGameInfo(y, vHeight) {
+  // 顯示遊戲資訊
   textAlign(CENTER, CENTER);
   textSize(32);
   fill(0);
@@ -82,72 +59,16 @@ function displayGameInfo(y, vHeight) {
   if (computerGesture) {
     text("電腦出拳: " + computerGesture, width / 2, y + vHeight + 80);
     textSize(48);
-    // 修正變數名稱從 result 改為 roundResult
-    let c = roundResult === "你贏了！" ? "#2a9d8f" : roundResult === "你輸了！" ? "#e76f51" : "#264653";
-    fill(c);
+    fill(roundResult === "你贏了！" ? "#2a9d8f" : roundResult === "你輸了！" ? "#e76f51" : "#264653");
     text(roundResult, width / 2, y + vHeight + 140);
   }
-}
 
-function handleAutoPlay() {
-  // 只有在出拳手勢（剪刀石頭布）且遊戲進行中才自動觸發
+  // 只有在玩家比出 剪刀、石頭、布 時，電腦才在 3 秒後出拳
   let validGestures = ["石頭", "剪刀", "布"];
-  if (gameState === "PLAYING" && validGestures.includes(playerGesture)) {
-    if (millis() - lastPlayTime > 3000) {
-      playGame();
-      lastPlayTime = millis();
-      gameState = "ROUND_END"; 
-    }
+  if (millis() - lastPlayTime > 3000 && validGestures.includes(playerGesture)) {
+    playGame();
+    lastPlayTime = millis();
   }
-}
-
-function checkControlGestures() {
-  if (playerGesture === "讚" && (gameState === "ROUND_END" || gameState === "FINISHED")) {
-    if (gameState === "FINISHED") {
-      winCount = 0; lossCount = 0; tieCount = 0;
-      fireworks = []; ghosts = [];
-    }
-    gameState = "PLAYING";
-    computerGesture = "";
-    roundResult = "請出拳...";
-  } else if (playerGesture === "OK" && gameState !== "FINISHED") {
-    gameState = "FINISHED";
-  }
-}
-
-function displayEndGameEffects() {
-  if (winCount > lossCount) {
-    if (random(1) < 0.1) fireworks.push(new Firework(random(width), height));
-    for (let i = fireworks.length - 1; i >= 0; i--) {
-      fireworks[i].update();
-      fireworks[i].show();
-      if (fireworks[i].done()) fireworks.splice(i, 1);
-    }
-    fill("#2a9d8f");
-    textSize(64);
-    text("大獲全勝！", width / 2, height / 2);
-  } else if (lossCount > winCount) {
-    if (frameCount % 60 === 0) ghosts.push(new Ghost(random(width), height + 50));
-    for (let i = ghosts.length - 1; i >= 0; i--) {
-      ghosts[i].update();
-      ghosts[i].show();
-      if (ghosts[i].y < -50) ghosts.splice(i, 1);
-    }
-    fill("#e76f51");
-    textSize(64);
-    text("再接再厲...", width / 2, height / 2);
-  } else {
-    imageMode(CENTER);
-    image(cheerImg, width / 2, height / 2, 300, 300);
-    imageMode(CORNER);
-    fill("#264653");
-    textSize(64);
-    text("勢均力敵！", width / 2, height / 2 + 200);
-  }
-  
-  textSize(24);
-  fill(0);
-  text("比出 👍 重新開始遊戲", width / 2, height - 50);
 }
 
 function windowResized() {
