@@ -1,27 +1,23 @@
 let capture;
 let handPose;
 let hands = [];
-let playerGesture = "未偵測到";
+let playerGesture = "等待中...";
 let computerGesture = "";
-let roundResult = "";
+let result = "";
 let options = ["石頭", "剪刀", "布"];
 let lastPlayTime = 0;
-
-// 遊戲統計與狀態
 let winCount = 0;
 let lossCount = 0;
 let tieCount = 0;
-let gameState = "PLAYING"; // PLAYING, ROUND_END, FINISHED
-
-// 特效相關
-let cheerImg;
+let gameState = "PLAYING"; // PLAYING, WAITING_FOR_COMMAND, FINISHED
+let ghostImg, cheerImg;
 let fireworks = [];
-let ghosts = [];
+let ghostY;
+let showCheer = false;
 
 function preload() {
   // 初始化 handPose 模型
-  handPose = ml5.handPose({ flipped: true }); // 使用 flipped 確保座標與鏡像一致
-  cheerImg = loadImage('picture/加油.png');
+  handPose = ml5.handPose();
 }
 
 function setup() {
@@ -44,31 +40,129 @@ function draw() {
   scale(-1, 1);            // 水平翻轉
   image(capture, 0, 0, vWidth, vHeight);
   
-  // 繪製手部關鍵點（可選，增加視覺效果）
+  // 繪製手部骨架與關鍵點
   if (hands.length > 0) {
-    drawHandSkeleton(vWidth, vHeight);
+    drawSkeleton(vWidth, vHeight);
   }
   pop();
 
   // 顯示遊戲資訊
   textAlign(CENTER, CENTER);
-  textSize(32);
   fill(0);
-  text("玩家手勢: " + playerGesture, width / 2, y + vHeight + 40);
-  
-  if (computerGesture) {
-    text("電腦出拳: " + computerGesture, width / 2, y + vHeight + 80);
-    textSize(48);
-    fill(roundResult === "你贏了！" ? "#2a9d8f" : roundResult === "你輸了！" ? "#e76f51" : "#264653");
-    text(roundResult, width / 2, y + vHeight + 140);
-  }
+  textSize(24);
+  text(`勝: ${winCount}  |  敗: ${lossCount}  |  平手: ${tieCount}`, width / 2, 30);
 
-  // 只有在玩家比出 剪刀、石頭、布 時，電腦才在 3 秒後出拳
-  let validGestures = ["石頭", "剪刀", "布"];
-  if (millis() - lastPlayTime > 3000 && validGestures.includes(playerGesture)) {
-    playGame();
-    lastPlayTime = millis();
+  if (gameState === "PLAYING") {
+    textSize(32);
+    text("玩家目前手勢: " + playerGesture, width / 2, y + vHeight + 40);
+    
+    if (computerGesture) {
+      text("電腦出拳: " + computerGesture, width / 2, y + vHeight + 80);
+      textSize(48);
+      fill(result === "你贏了！" ? "#2a9d8f" : result === "你輸了！" ? "#e76f51" : "#264653");
+      text(result, width / 2, y + vHeight + 140);
+    }
+
+    // 猜拳自動觸發邏輯
+    if (playerGesture !== "未偵測到" && playerGesture !== "判定中..." && !["6", "OK"].includes(playerGesture)) {
+      let elapsed = millis() - lastPlayTime;
+      if (elapsed > 3000) {
+        playGame();
+        lastPlayTime = millis();
+        gameState = "WAITING_FOR_COMMAND";
+      }
+      fill(255, 0, 0);
+      textSize(48);
+      text(ceil((3000 - elapsed) / 1000), width / 2, y - 40);
+    } else {
+      lastPlayTime = millis();
+    }
+  } else if (gameState === "WAITING_FOR_COMMAND") {
+    fill(0);
+    textSize(28);
+    text("比出『 6 』繼續遊戲，或是『 OK 』結束遊戲", width / 2, y + vHeight + 180);
+    
+    if (playerGesture === "6") {
+      resetRound();
+    } else if (playerGesture === "OK") {
+      gameState = "FINISHED";
+    }
+  } else if (gameState === "FINISHED") {
+    handleEndGameEffects();
   }
+}
+
+// 煙火特效類別
+class Firework {
+  constructor(x, y) {
+    this.particles = [];
+    let col = color(random(255), random(255), random(255));
+    for (let i = 0; i < 20; i++) {
+      this.particles.push(new Particle(x, y, col));
+    }
+  }
+  update() {
+    for (let p of this.particles) p.update();
+  }
+  show() {
+    for (let p of this.particles) p.show();
+  }
+  done() {
+    return this.particles.length > 0 && this.particles[0].lifespan <= 0;
+  }
+}
+
+class Particle {
+  constructor(x, y, col) {
+    this.pos = createVector(x, y);
+    this.vel = p5.Vector.random2D().mult(random(2, 6));
+    this.lifespan = 255;
+    this.col = col;
+  }
+  update() {
+    this.pos.add(this.vel);
+    this.lifespan -= 5;
+  }
+  show() {
+    noStroke();
+    fill(red(this.col), green(this.col), blue(this.col), this.lifespan);
+    ellipse(this.pos.x, this.pos.y, 5);
+  }
+}
+
+function resetRound() {
+  computerGesture = "";
+  result = "";
+  gameState = "PLAYING";
+  lastPlayTime = millis();
+}
+
+function handleEndGameEffects() {
+  if (winCount > lossCount) {
+    // 放煙火
+    if (frameCount % 10 === 0) {
+      fireworks.push(new Firework(random(width), random(height / 2)));
+    }
+    for (let i = fireworks.length - 1; i >= 0; i--) {
+      fireworks[i].update();
+      fireworks[i].show();
+      if (fireworks[i].done()) fireworks.splice(i, 1);
+    }
+  } else if (lossCount > winCount) {
+    // 幽靈飄出
+    imageMode(CENTER);
+    image(ghostImg, width / 2, ghostY, 200, 200);
+    ghostY -= 3;
+    if (ghostY < -200) ghostY = height;
+  } else {
+    // 加油
+    imageMode(CENTER);
+    image(cheerImg, width / 2, height / 2, 400, 400);
+  }
+  
+  fill(0);
+  textSize(32);
+  text("遊戲已結束", width / 2, 100);
 }
 
 function windowResized() {
@@ -87,25 +181,24 @@ function gotHands(results) {
 function analyzeGesture(hand) {
   let points = hand.keypoints;
   
-  // 檢查手指是否伸直
+  let isThumbUp = points[4].x < points[3].x; // 簡單判定拇指是否有張開 (鏡像後方向需注意)
   let isIndexUp = points[8].y < points[6].y;
   let isMiddleUp = points[12].y < points[10].y;
   let isRingUp = points[16].y < points[14].y;
   let isPinkyUp = points[20].y < points[18].y;
-  let isThumbUp = points[4].y < points[3].y && points[4].y < points[17].y;
 
-  // OK 手勢判定：食指尖與拇指尖靠近，且其他三指伸直
-  let okDist = dist(points[8].x, points[8].y, points[4].x, points[4].y);
-  if (okDist < 40 && isMiddleUp && isRingUp && isPinkyUp) {
+  // OK手勢判定：拇指尖與食指尖距離很近，且中、無名、小指伸直
+  let d = dist(points[4].x, points[4].y, points[8].x, points[8].y);
+  if (d < 30 && isMiddleUp && isRingUp && isPinkyUp) {
     return "OK";
   }
 
-  // 讚手勢判定：拇指向上，其他手指握拳
-  if (isThumbUp && !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-    return "讚";
+  // 數字 6 判定：拇指與小指伸直，其餘握拳
+  if (isThumbUp && isPinkyUp && !isIndexUp && !isMiddleUp && !isRingUp) {
+    return "6";
   }
 
-  // 猜拳判定
+  // 猜拳邏輯
   if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
     return "布";
   } else if (isIndexUp && isMiddleUp && !isRingUp && !isPinkyUp) {
@@ -113,126 +206,64 @@ function analyzeGesture(hand) {
   } else if (!isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
     return "石頭";
   }
-  return "未知";
+  return "判定中...";
 }
 
 function playGame() {
-  computerGesture = random(options);
-  
-  if (playerGesture === computerGesture) {
-    roundResult = "平手！";
-    tieCount++;
-  } else if (
-    (playerGesture === "石頭" && computerGesture === "剪刀") ||
-    (playerGesture === "剪刀" && computerGesture === "布") ||
-    (playerGesture === "布" && computerGesture === "石頭")
-  ) {
-    roundResult = "你贏了！";
-    winCount++;
-  } else {
-    roundResult = "你輸了！";
-    lossCount++;
+  if (playerGesture === "石頭" || playerGesture === "剪刀" || playerGesture === "布") {
+    computerGesture = random(options);
+    
+    if (playerGesture === computerGesture) {
+      result = "平手！";
+      tieCount++;
+    } else if (
+      (playerGesture === "石頭" && computerGesture === "剪刀") ||
+      (playerGesture === "剪刀" && computerGesture === "布") ||
+      (playerGesture === "布" && computerGesture === "石頭")
+    ) {
+      result = "你贏了！";
+      winCount++;
+    } else {
+      result = "你輸了！";
+      lossCount++;
+    }
   }
 }
 
-function drawHandSkeleton(vWidth, vHeight) {
+function drawSkeleton(vWidth, vHeight) {
   let hand = hands[0];
   let points = hand.keypoints;
 
-  // 畫骨架連接線
-  stroke(255, 255, 0);
-  strokeWeight(3);
-  
-  // 定義手指連接結構
-  let skeleton = [
-    [0, 1, 2, 3, 4],    // 拇指
-    [0, 5, 6, 7, 8],    // 食指
-    [9, 10, 11, 12],   // 中指
-    [13, 14, 15, 16],  // 無名指
-    [17, 18, 19, 20],  // 小指
-    [5, 9, 13, 17, 0]  // 手掌底
+  // 手部連接定義 (21 個點的索引關係)
+  let connections = [
+    [0, 1], [1, 2], [2, 3], [3, 4],       // 大拇指
+    [0, 5], [5, 6], [6, 7], [7, 8],       // 食指
+    [0, 9], [9, 10], [10, 11], [11, 12],  // 中指
+    [0, 13], [13, 14], [14, 15], [15, 16],// 無名指
+    [0, 17], [17, 18], [18, 19], [19, 20],// 小指
+    [5, 9], [9, 13], [13, 17], [0, 17]    // 掌心基部
   ];
 
-  for (let segment of skeleton) {
-    for (let i = 0; i < segment.length - 1; i++) {
-      let p1 = points[segment[i]];
-      let p2 = points[segment[i+1]];
-      line(
-        map(p1.x, 0, capture.width, 0, vWidth), map(p1.y, 0, capture.height, 0, vHeight),
-        map(p2.x, 0, capture.width, 0, vWidth), map(p2.y, 0, capture.height, 0, vHeight)
-      );
-    }
+  // 1. 先畫骨架線條
+  stroke(255, 0, 0);
+  strokeWeight(2);
+  for (let i = 0; i < connections.length; i++) {
+    let p1 = points[connections[i][0]];
+    let p2 = points[connections[i][1]];
+    let x1 = map(p1.x, 0, capture.width, 0, vWidth);
+    let y1 = map(p1.y, 0, capture.height, 0, vHeight);
+    let x2 = map(p2.x, 0, capture.width, 0, vWidth);
+    let y2 = map(p2.y, 0, capture.height, 0, vHeight);
+    line(x1, y1, x2, y2);
   }
 
-  // 畫關節點
+  // 2. 再畫關鍵點
+  fill(255, 255, 0);
   noStroke();
-  fill(255, 0, 0);
-  for (let kp of points) {
-    ellipse(map(kp.x, 0, capture.width, 0, vWidth), map(kp.y, 0, capture.height, 0, vHeight), 8, 8);
-  }
-}
-
-// --- 特效類別 ---
-
-class Firework {
-  constructor(x, y) {
-    this.pos = createVector(x, y);
-    this.vel = createVector(random(-2, 2), random(-12, -8));
-    this.particles = [];
-    this.exploded = false;
-  }
-  update() {
-    if (!this.exploded) {
-      this.pos.add(this.vel);
-      this.vel.y += 0.2; // 重力
-      if (this.vel.y >= 0) {
-        this.exploded = true;
-        for (let i = 0; i < 50; i++) this.particles.push(new Particle(this.pos.x, this.pos.y));
-      }
-    }
-    for (let p of this.particles) p.update();
-  }
-  show() {
-    if (!this.exploded) {
-      stroke(255);
-      point(this.pos.x, this.pos.y);
-    }
-    for (let p of this.particles) p.show();
-  }
-  done() { return this.exploded && this.particles.length === 0; }
-}
-
-class Particle {
-  constructor(x, y) {
-    this.pos = createVector(x, y);
-    this.vel = p5.Vector.random2D().mult(random(2, 6));
-    this.acc = createVector(0, 0.1);
-    this.life = 255;
-  }
-  update() {
-    this.vel.add(this.acc);
-    this.pos.add(this.vel);
-    this.life -= 4;
-  }
-  show() {
-    stroke(random(255), random(255), random(255), this.life);
-    strokeWeight(4);
-    point(this.pos.x, this.pos.y);
-  }
-}
-
-class Ghost {
-  constructor(x, y) {
-    this.x = x; this.y = y;
-    this.speed = random(2, 4);
-  }
-  update() { this.y -= this.speed; }
-  show() {
-    fill(255, 200);
-    noStroke();
-    ellipse(this.x, this.y, 40, 60);
-    fill(0);
-    ellipse(this.x - 10, this.y - 10, 5, 5);
-    ellipse(this.x + 10, this.y - 10, 5, 5);
+  for (let i = 0; i < hand.keypoints.length; i++) {
+    let keypoint = hand.keypoints[i];
+    let kx = map(keypoint.x, 0, capture.width, 0, vWidth);
+    let ky = map(keypoint.y, 0, capture.height, 0, vHeight);
+    ellipse(kx, ky, 8, 8);
   }
 }
