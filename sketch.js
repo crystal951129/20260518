@@ -14,6 +14,8 @@ let gameEnded = false;
 let ghostImg, cheerImg;
 let fireworks = [];
 let ghostY;
+let gestureHoldStartTime = 0;
+let lastDetectedGesture = "";
 
 function preload() {
   // 初始化 handPose 模型
@@ -37,6 +39,8 @@ function draw() {
 
   if (gameEnded) {
     showEndScreen();
+    // 處理 6 手勢的 2 秒等待邏輯
+    handleSpecialGesture("6");
     return;
   }
 
@@ -67,16 +71,14 @@ function draw() {
   text("玩家手勢: " + playerGesture, width / 2, y + vHeight + 40);
   
   if (computerGesture) {
-    text("電腦出拳: " + computerGesture, width / 2, y + vHeight + 80);
+    text("電腦出拳: " + computerGesture, width / 2, y + vHeight + 90);
     textSize(48);
     fill(result === "你贏了！" ? "#2a9d8f" : result === "你輸了！" ? "#e76f51" : "#264653");
-    text(result, width / 2, y + vHeight + 140);
+    text(result, width / 2, y + vHeight + 150);
   }
 
-  // 檢查是否手勢為 OK，若是則結束
-  if (playerGesture === "OK") {
-    gameEnded = true;
-  }
+  // 處理 OK 手勢的 2 秒等待邏輯
+  handleSpecialGesture("OK");
 
   // 自動結束邏輯：超過 10 秒沒看到手
   if (millis() - lastSeenTime > 10000) {
@@ -101,6 +103,33 @@ function draw() {
   }
 }
 
+// 新增函式處理需要等待 2 秒的特殊手勢
+function handleSpecialGesture(target) {
+  if (playerGesture === target) {
+    if (lastDetectedGesture !== target) {
+      gestureHoldStartTime = millis();
+      lastDetectedGesture = target;
+    }
+
+    let holdElapsed = millis() - gestureHoldStartTime;
+    if (holdElapsed < 2000) {
+      // 顯示維持手勢的進度
+      push();
+      textAlign(CENTER);
+      textSize(24);
+      fill(255, 100, 0);
+      text(`確認手勢 "${target}" 中: ${nf((2000 - holdElapsed) / 1000, 1, 1)}s`, width / 2, height - 30);
+      pop();
+    } else {
+      if (target === "OK") gameEnded = true;
+      if (target === "6" && gameEnded) resetGame();
+      lastDetectedGesture = ""; // 觸發後重置，避免重複偵測
+    }
+  } else if (lastDetectedGesture === target) {
+    lastDetectedGesture = ""; // 如果手勢變了，重置追蹤
+  }
+}
+
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
@@ -113,6 +142,19 @@ function gotHands(results) {
   } else {
     playerGesture = "未偵測到";
   }
+}
+
+function resetGame() {
+  winCount = 0;
+  lossCount = 0;
+  drawCount = 0;
+  gameEnded = false;
+  lastSeenTime = millis();
+  lastPlayTime = millis();
+  fireworks = [];
+  ghostY = height;
+  lastDetectedGesture = "";
+  gestureHoldStartTime = 0;
 }
 
 function analyzeGesture(hand) {
@@ -133,6 +175,11 @@ function analyzeGesture(hand) {
   let d = dist(points[8].x, points[8].y, points[4].x, points[4].y);
   if (d < 30 && isMiddleUp && isRingUp && isPinkyUp) {
     return "OK";
+  }
+
+  // 偵測 6 手勢 (大拇指與小指伸直，其餘握拳)
+  if (isThumbUp && isPinkyUp && !isIndexUp && !isMiddleUp && !isRingUp) {
+    return "6";
   }
 
   // 簡易判定邏輯
@@ -212,6 +259,9 @@ function showEndScreen() {
   text("遊戲結束", width / 2, height / 2 - 100);
   textSize(32);
   text(`最終戰績 - 勝: ${winCount} 敗: ${lossCount} 平手: ${drawCount}`, width / 2, height / 2 - 30);
+
+  textSize(24);
+  text("比出 '6' 手勢以重新開始", width / 2, height / 2 + 250);
 
   if (winCount > lossCount) {
     // 勝利：煙火特效
